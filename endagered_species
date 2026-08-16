@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""
+Endangered Species Tracker
+A simple command-line application to track endangered species.
+Data is stored in a JSON file for persistence.
+"""
+
+import json
+import os
+from typing import List, Dict, Optional
+
+# --------------------------
+# Species Class
+# --------------------------
+class Species:
+    """Represents a single endangered species."""
+
+    VALID_STATUSES = [
+        "Critically Endangered",
+        "Endangered",
+        "Vulnerable",
+        "Near Threatened",
+        "Least Concern",
+        "Data Deficient",
+        "Not Evaluated"
+    ]
+
+    def __init__(self, name: str, scientific_name: str = "", status: str = "",
+                 population: str = "", habitat: str = "", threats: str = "", notes: str = ""):
+        self.name = name.strip()
+        self.scientific_name = scientific_name.strip()
+        self.status = status.strip() if status in self.VALID_STATUSES else "Not Evaluated"
+        self.population = population.strip()
+        self.habitat = habitat.strip()
+        self.threats = threats.strip()
+        self.notes = notes.strip()
+
+    def to_dict(self) -> Dict:
+        """Convert species to dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "scientific_name": self.scientific_name,
+            "status": self.status,
+            "population": self.population,
+            "habitat": self.habitat,
+            "threats": self.threats,
+            "notes": self.notes
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Species':
+        """Create a Species instance from a dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            scientific_name=data.get("scientific_name", ""),
+            status=data.get("status", ""),
+            population=data.get("population", ""),
+            habitat=data.get("habitat", ""),
+            threats=data.get("threats", ""),
+            notes=data.get("notes", "")
+        )
+
+    def __str__(self) -> str:
+        """String representation for display."""
+        return (f"Name: {self.name}\n"
+                f"Scientific Name: {self.scientific_name or 'N/A'}\n"
+                f"Status: {self.status}\n"
+                f"Population: {self.population or 'Unknown'}\n"
+                f"Habitat: {self.habitat or 'N/A'}\n"
+                f"Threats: {self.threats or 'N/A'}\n"
+                f"Notes: {self.notes or 'N/A'}\n"
+                + "-" * 40)
+
+
+# --------------------------
+# Tracker Class
+# --------------------------
+class EndangeredSpeciesTracker:
+    """Manages a collection of Species objects with JSON persistence."""
+
+    def __init__(self, filename: str = "species.json"):
+        self.filename = filename
+        self.species_list: List[Species] = []
+        self.load()
+
+    def add_species(self, species: Species) -> None:
+        """Add a new species to the tracker."""
+        # Prevent duplicates by name (case-insensitive)
+        if self.get_species(species.name):
+            print(f"Species '{species.name}' already exists.")
+            return
+        self.species_list.append(species)
+        print(f"Added: {species.name}")
+
+    def remove_species(self, name: str) -> bool:
+        """Remove a species by name. Returns True if removed, False otherwise."""
+        for i, sp in enumerate(self.species_list):
+            if sp.name.lower() == name.lower():
+                del self.species_list[i]
+                print(f"Removed: {sp.name}")
+                return True
+        print(f"Species '{name}' not found.")
+        return False
+
+    def update_species(self, name: str, **kwargs) -> bool:
+        """Update fields of an existing species."""
+        sp = self.get_species(name)
+        if not sp:
+            print(f"Species '{name}' not found.")
+            return False
+        for field, value in kwargs.items():
+            if hasattr(sp, field):
+                # If updating status, validate it
+                if field == "status" and value not in Species.VALID_STATUSES:
+                    print(f"Invalid status '{value}'. Keeping previous status.")
+                    continue
+                setattr(sp, field, value.strip() if isinstance(value, str) else value)
+        print(f"Updated: {sp.name}")
+        return True
+
+    def get_species(self, name: str) -> Optional[Species]:
+        """Return a species by name (case-insensitive) or None."""
+        for sp in self.species_list:
+            if sp.name.lower() == name.lower():
+                return sp
+        return None
+
+    def list_species(self) -> List[Species]:
+        """Return all species."""
+        return self.species_list
+
+    def search_by_status(self, status: str) -> List[Species]:
+        """Return species matching a given conservation status."""
+        return [sp for sp in self.species_list if sp.status.lower() == status.lower()]
+
+    def save(self) -> None:
+        """Save all species to JSON file."""
+        data = [sp.to_dict() for sp in self.species_list]
+        with open(self.filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        print(f"Data saved to {self.filename}")
+
+    def load(self) -> None:
+        """Load species from JSON file, if it exists."""
+        if not os.path.exists(self.filename):
+            print(f"No existing data file '{self.filename}'. Starting fresh.")
+            return
+        try:
+            with open(self.filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            self.species_list = [Species.from_dict(item) for item in data]
+            print(f"Loaded {len(self.species_list)} species from {self.filename}.")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading data: {e}. Starting fresh.")
+            self.species_list = []
+
+
+# --------------------------
+# Command-Line Interface
+# --------------------------
+def main():
+    tracker = EndangeredSpeciesTracker()
+
+    while True:
+        print("\n" + "=" * 40)
+        print("ENDANGERED SPECIES TRACKER")
+        print("=" * 40)
+        print("1. Add species")
+        print("2. View all species")
+        print("3. Search by status")
+        print("4. Update species")
+        print("5. Delete species")
+        print("6. Save and exit")
+        print("7. Save (without exiting)")
+        print("=" * 40)
+
+        choice = input("Enter your choice (1-7): ").strip()
+
+        if choice == "1":
+            print("\nEnter species details:")
+            name = input("Name (required): ").strip()
+            if not name:
+                print("Name cannot be empty.")
+                continue
+            sci_name = input("Scientific name: ").strip()
+            status = input(f"Status ({', '.join(Species.VALID_STATUSES)}): ").strip()
+            if status not in Species.VALID_STATUSES:
+                print(f"Invalid status. Setting to 'Not Evaluated'.")
+                status = "Not Evaluated"
+            population = input("Population estimate: ").strip()
+            habitat = input("Habitat: ").strip()
+            threats = input("Threats: ").strip()
+            notes = input("Notes: ").strip()
+
+            species = Species(name, sci_name, status, population, habitat, threats, notes)
+            tracker.add_species(species)
+
+        elif choice == "2":
+            if not tracker.species_list:
+                print("No species recorded yet.")
+            else:
+                print("\n--- All Species ---")
+                for sp in tracker.species_list:
+                    print(sp)
+
+        elif choice == "3":
+            status = input("Enter conservation status to search: ").strip()
+            results = tracker.search_by_status(status)
+            if results:
+                print(f"\n--- Species with status '{status}' ---")
+                for sp in results:
+                    print(sp)
+            else:
+                print(f"No species found with status '{status}'.")
+
+        elif choice == "4":
+            name = input("Enter the name of the species to update: ").strip()
+            sp = tracker.get_species(name)
+            if not sp:
+                print(f"Species '{name}' not found.")
+                continue
+            print("Leave a field blank to keep its current value.")
+            print(f"Current name: {sp.name}")
+            new_name = input("New name: ").strip()
+            sci_name = input(f"New scientific name [{sp.scientific_name}]: ").strip() or sp.scientific_name
+            status = input(f"New status [{sp.status}]: ").strip()
+            if status:
+                if status not in Species.VALID_STATUSES:
+                    print(f"Invalid status. Keeping current status '{sp.status}'.")
+                    status = sp.status
+            else:
+                status = sp.status
+            population = input(f"New population [{sp.population}]: ").strip() or sp.population
+            habitat = input(f"New habitat [{sp.habitat}]: ").strip() or sp.habitat
+            threats = input(f"New threats [{sp.threats}]: ").strip() or sp.threats
+            notes = input(f"New notes [{sp.notes}]: ").strip() or sp.notes
+
+            updates = {
+                "name": new_name or sp.name,
+                "scientific_name": sci_name,
+                "status": status,
+                "population": population,
+                "habitat": habitat,
+                "threats": threats,
+                "notes": notes
+            }
+            tracker.update_species(name, **updates)
+
+        elif choice == "5":
+            name = input("Enter the name of the species to delete: ").strip()
+            tracker.remove_species(name)
+
+        elif choice == "6":
+            tracker.save()
+            print("Goodbye!")
+            break
+
+        elif choice == "7":
+            tracker.save()
+
+        else:
+            print("Invalid choice. Please enter a number from 1 to 7.")
+
+if __name__ == "__main__":
+    main()
